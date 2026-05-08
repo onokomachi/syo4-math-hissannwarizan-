@@ -135,11 +135,25 @@ const Practice = (() => {
       el.classList.add('correct');
     });
 
+    // For intermediate zero diffs: briefly show green, then fade to ghost
+    // to teach "0 のときは書きません"
+    if (step.isZeroDiff) {
+      setSpeech('0 のときは　書きません！　次の数字をおろすよ');
+      setTimeout(() => {
+        cells.forEach(({ el }) => {
+          el.classList.remove('correct');
+          // practice-ghost triggers the green→gray CSS transition
+          el.classList.add('zero-diff', 'practice-ghost');
+        });
+      }, 600);
+    }
+
     stepIndex++;
     inputBuffer = '';
 
     if (stepIndex >= problem.steps.length) { onComplete(); return; }
-    setTimeout(handleAutoSteps, 350);
+    // Slightly longer delay for zero-diff so student sees the message
+    setTimeout(handleAutoSteps, step.isZeroDiff ? 900 : 350);
   }
 
   // ── Incorrect answer ──────────────────────────────────────

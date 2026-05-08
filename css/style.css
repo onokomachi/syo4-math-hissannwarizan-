@@ -310,12 +310,17 @@ section[data-screen].active {
 .cell.dividend  { color: var(--text); }
 .cell.divisor   { color: var(--c-divisor); font-size: 26px; }
 
-/* Bracket: divisor cell forms the ┐ corner */
+/* Bracket: vertical bar (right of divisor) + top bar (above dividend)
+   divisor: right border only → creates left vertical │
+   dividend: top border      → creates top horizontal ─
+   Together they form the ┌──── shape of Japanese long division */
 .cell.divisor {
   border-right: 4px solid var(--c-bracket);
-  border-bottom: 4px solid var(--c-bracket);
-  border-bottom-right-radius: 0;
   border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.cell.dividend {
+  border-top: 4px solid var(--c-bracket);
 }
 
 /* Subtraction line */
@@ -378,6 +383,45 @@ section[data-screen].active {
 .cell.hint-shown {
   background: var(--amber-light) !important;
   border: 2px solid var(--amber) !important;
+}
+
+/* ── Zero intermediate diff: 0 は書きません ─────────────────
+   Tutorial: shown as ghost from the start
+   Practice: transitions from .correct to .zero-diff after 0.6s
+   ──────────────────────────────────────────────────────────── */
+.cell.zero-diff {
+  color: #94A3B8 !important;            /* light blue-gray */
+  background: transparent !important;
+  border: 2px dashed #CBD5E1 !important;
+  font-style: italic;
+  border-radius: var(--radius-sm) !important;
+  position: relative;
+}
+/* Small "×" badge in corner to reinforce "don't write this" */
+.cell.zero-diff::after {
+  content: '書かない';
+  position: absolute;
+  bottom: -1px;
+  right: 1px;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 700;
+  color: #EF4444;
+  opacity: 0.7;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+/* In tutorial allVisible mode, zero-diff cells start ghosted */
+.cell.diff.zero-diff {
+  color: #CBD5E1 !important;
+}
+/* Practice mode only: animate the transition from correct → ghost */
+.cell.zero-diff.practice-ghost {
+  animation: fadeToGhost 0.4s ease forwards;
+}
+@keyframes fadeToGhost {
+  from { background: var(--green-light); border-color: var(--green); color: var(--green-dark); }
+  to   { background: transparent; border-color: #CBD5E1; color: #94A3B8; }
 }
 
 /* Orosu reveal animation */

@@ -224,6 +224,8 @@ const GridRenderer = (() => {
         el.dataset.col = c;
         if (cellDef.digitPos !== undefined) el.dataset.digitPos = cellDef.digitPos;
         if (cellDef.stepKind)              el.dataset.stepKind  = cellDef.stepKind;
+        // Mark intermediate-zero diff cells (0 は書かない)
+        if (cellDef.isZeroDiff)            el.classList.add('zero-diff');
 
         el.style.gridColumn = c + 1;
         el.style.gridRow    = r + 1;
