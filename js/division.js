@@ -104,12 +104,16 @@ const Division = (() => {
       });
 
       const diff = running - product;
+      // isZeroDiff: intermediate zero (diff=0 and not the last round)
+      // Students should NOT write this 0 in the grid
+      const isZeroDiff = diff === 0 && i < n - 1;
       steps.push({
         kind: 'hiku',
         digitPos: i,
         value: diff,
         minuend: running,
         subtrahend: product,
+        isZeroDiff,
       });
 
       running = diff;
@@ -193,6 +197,7 @@ const Division = (() => {
       // Diff row: difference digits right-aligned to col i+1
       const hikuStep = steps.find(s => s.kind === 'hiku' && s.digitPos === i);
       const diff = hikuStep ? hikuStep.value : remainder;
+      const isZeroDiff = hikuStep ? hikuStep.isZeroDiff : false;
       const diffStr = String(diff);
       const diffDigits = diffStr.split('').map(Number);
       const dStartCol = (i + 1) + 1 - diffDigits.length;
@@ -204,6 +209,8 @@ const Division = (() => {
             value: d, given: false,
             row: baseRow + 2, col: c,
             stepKind: 'hiku', digitPos: i,
+            // isZeroDiff=true → show ghost (中間で0は書かない)
+            isZeroDiff,
           };
         }
       });
@@ -249,6 +256,9 @@ const Division = (() => {
       case 'kakeru':
         return `${divisor} × ${step.quotientDigit} = ${step.value}　→　かけ算をしよう！`;
       case 'hiku':
+        if (step.isZeroDiff) {
+          return `${step.minuend} − ${step.subtrahend} = 0　ぴったり！　0 はここに書きません`;
+        }
         return `${step.minuend} − ${step.subtrahend} = ${step.value}　→　ひき算をしよう！`;
       case 'orosu':
         return `${step.digit} をおろして　${step.runningAfter} にしよう！`;
