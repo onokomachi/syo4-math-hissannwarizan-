@@ -188,6 +188,15 @@ const Division = (() => {
         }
       });
 
+      // Sign column (col 0): × for product rows, − for diff rows
+      // Shown as muted operation markers, always visible (given: true)
+      grid[baseRow][0] = {
+        kind: 'sign_mul', value: '×', given: true, row: baseRow, col: 0,
+      };
+      grid[baseRow + 2][0] = {
+        kind: 'sign_sub', value: '−', given: true, row: baseRow + 2, col: 0,
+      };
+
       // Subtraction line: stored at col i+1, span = i+1 (rendered from col1)
       grid[baseRow + 1][i + 1] = {
         kind: 'line', value: null, given: true,
