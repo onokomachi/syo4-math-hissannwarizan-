@@ -7,19 +7,17 @@
 
 const Practice = (() => {
 
-  let problem     = null;
-  let stepIndex   = 0;
-  let hintsUsed   = 0;
-  let startTime   = null;
-  let testMode    = false;
+  let problem       = null;
+  let stepIndex     = 0;
+  let hintsUsed     = 0;
+  let startTime     = null;
+  let testMode      = false;
   let timerInterval = null;
-  let inputBuffer = '';   // for multi-digit entry (products ≥ 10)
-  let level       = 1;
-  let hintTimeout = null;
-
-  // Expose for result screen "もう一問" button
-  let _wasTestMode = false;
-  Object.defineProperty(Practice, 'wasTestMode', { get: () => _wasTestMode });
+  let inputBuffer   = '';
+  let diffKey       = '2-0';
+  let hintTimeout   = null;
+  // Exposed via getter — DO NOT reference Practice inside IIFE
+  let _wasTestMode  = false;
 
   // ── Public: init ──────────────────────────────────────────
   function init(params = {}) {
@@ -28,53 +26,51 @@ const Practice = (() => {
 
     testMode = !!params.testMode;
     _wasTestMode = testMode;
-    level = params.level !== undefined ? params.level : App.getCurrentLevel();
+
+    const d = App.getDifficulty();
+    diffKey = App.getDifficultyKey();
+    const recent = App.getRecentProblems();
+    const { dividend, divisor } = Division.selectProblem(d.digits, d.remainder, recent);
+    problem   = Division.computeSteps(dividend, divisor);
     stepIndex = 0;
     hintsUsed = 0;
     inputBuffer = '';
     startTime = Date.now();
 
-    const recent = App.getRecentProblems();
-    const { dividend, divisor } = Division.selectProblem(level, recent);
-    problem = Division.computeSteps(dividend, divisor);
-
-    // Title & timer
+    // UI setup
     const titleEl = document.getElementById('practice-title');
     if (titleEl) titleEl.textContent = testMode ? 'テスト' : 'れんしゅう';
+
+    const problemEl = document.getElementById('practice-problem-label');
+    if (problemEl) problemEl.textContent = `${dividend} ÷ ${divisor}`;
 
     const timerEl = document.getElementById('practice-timer');
     if (timerEl) timerEl.style.display = testMode ? '' : 'none';
 
-    // Hint button
     const hintBtn = document.getElementById('hint-btn');
     if (hintBtn) hintBtn.style.display = testMode ? 'none' : '';
 
-    // Render grid (interactive)
+    // Render grid
     const container = document.getElementById('practice-grid');
     GridRenderer.render(container, problem, { interactive: true, allVisible: false });
 
     if (testMode) startTimer();
-    activateCurrentStep();
+    handleAutoSteps();
   }
 
-  // ── Input entry point ────────────────────────────────────
+  // ── Numpad input ──────────────────────────────────────────
   function numpadInput(digit) {
     if (!problem || stepIndex >= problem.steps.length) return;
     const step = problem.steps[stepIndex];
 
-    if (step.kind === 'orosu') {
-      // オロス is automatic — just advance
-      advanceStep();
-      return;
-    }
+    // orosu is always automatic — should not reach here
+    if (step.kind === 'orosu') { handleAutoSteps(); return; }
 
     const expectedStr = String(step.value);
-    const expectedDigits = expectedStr.length;
-
     inputBuffer += String(digit);
-    updateActiveCell(inputBuffer);
+    updateActiveCells();
 
-    if (inputBuffer.length < expectedDigits) return; // wait for more digits
+    if (inputBuffer.length < expectedStr.length) return; // wait for more
 
     const entered = inputBuffer;
     inputBuffer = '';
@@ -87,55 +83,54 @@ const Practice = (() => {
   }
 
   function numpadBackspace() {
-    if (!problem || inputBuffer.length === 0) return;
+    if (!inputBuffer.length) return;
     inputBuffer = inputBuffer.slice(0, -1);
-    updateActiveCell(inputBuffer || '');
+    updateActiveCells();
   }
 
-  // ── Hint ─────────────────────────────────────────────────
+  // ── Hint (practice mode only) ─────────────────────────────
   function showHint() {
     if (testMode || !problem || stepIndex >= problem.steps.length) return;
     const step = problem.steps[stepIndex];
-    if (step.kind === 'orosu') { advanceStep(); return; }
+    if (step.kind === 'orosu') { handleAutoSteps(); return; }
 
     hintsUsed++;
-
+    inputBuffer = '';
     const container = document.getElementById('practice-grid');
     const cells = GridRenderer.getCellsForStep(container, step, problem);
 
     if (hintsUsed <= 2) {
-      // Show the answer briefly, then hide
+      // Show correct answer briefly
       cells.forEach(({ el, cell }) => {
-        el.textContent = cell.value;
+        el.textContent = cell.value !== null ? cell.value : '';
         el.classList.add('hint-shown');
+        el.classList.remove('active-input');
       });
       clearHintTimeout();
       hintTimeout = setTimeout(() => {
         cells.forEach(({ el }) => {
           el.classList.remove('hint-shown');
           el.textContent = '';
+          el.classList.add('active-input');
         });
-        inputBuffer = '';
-        updateInstruction();
+        updateActiveCells();
       }, 1500);
     } else {
-      // Only show mnemonic label
-      setMnemonic(step.kind);
-      const pill = document.querySelector(`.mnemonic-pill[data-kind="${step.kind}"]`);
+      // Only flash the mnemonic pill — no value shown
+      const pill = document.querySelector(`#practice-screen .mnemonic-pill[data-kind="${step.kind}"]`);
       if (pill) {
-        pill.classList.add('active');
-        setTimeout(() => pill.style.transform = 'scale(1.3)', 50);
-        setTimeout(() => pill.style.transform = '', 400);
+        pill.classList.add('active', 'hint-flash');
+        setTimeout(() => pill.classList.remove('hint-flash'), 600);
       }
     }
   }
 
-  // ── Internal: correct answer ──────────────────────────────
+  // ── Correct answer ────────────────────────────────────────
   function onCorrect(step) {
     const container = document.getElementById('practice-grid');
     const cells = GridRenderer.getCellsForStep(container, step, problem);
     cells.forEach(({ el, cell }) => {
-      el.textContent = cell.value;
+      el.textContent = cell.value !== null ? cell.value : '';
       el.classList.remove('input-target', 'active-input', 'incorrect', 'hint-shown');
       el.classList.add('correct');
     });
@@ -143,133 +138,103 @@ const Practice = (() => {
     stepIndex++;
     inputBuffer = '';
 
-    if (stepIndex >= problem.steps.length) {
-      onComplete();
-      return;
-    }
-
-    // Auto-handle オロス steps
-    setTimeout(() => handleAutoSteps(), 350);
+    if (stepIndex >= problem.steps.length) { onComplete(); return; }
+    setTimeout(handleAutoSteps, 350);
   }
 
+  // ── Incorrect answer ──────────────────────────────────────
+  function onIncorrect(step) {
+    const container = document.getElementById('practice-grid');
+    const cells = GridRenderer.getCellsForStep(container, step, problem);
+    const expectedStr = String(step.value);
+    const paddedBuf = inputBuffer.padStart ? inputBuffer : '';
+
+    cells.forEach(({ el }, idx) => {
+      el.textContent = paddedBuf[idx] || '?';
+      el.classList.add('incorrect');
+    });
+    inputBuffer = '';
+
+    setTimeout(() => {
+      cells.forEach(({ el }) => {
+        el.classList.remove('incorrect');
+        el.textContent = '';
+        el.classList.add('active-input');
+      });
+    }, 600);
+  }
+
+  // ── Handle auto steps (orosu) ────────────────────────────
   function handleAutoSteps() {
     if (!problem || stepIndex >= problem.steps.length) return;
     const step = problem.steps[stepIndex];
+
     if (step.kind === 'orosu') {
-      animateOrosu(step);
+      revealOrosu(step);
       stepIndex++;
       setTimeout(() => {
-        if (stepIndex < problem.steps.length) activateCurrentStep();
-        else onComplete();
-      }, 600);
+        if (stepIndex >= problem.steps.length) onComplete();
+        else handleAutoSteps();
+      }, 500);
     } else {
       activateCurrentStep();
     }
   }
 
-  // ── Internal: wrong answer ───────────────────────────────
-  function onIncorrect(step) {
+  // ── Reveal orosu digit automatically ─────────────────────
+  function revealOrosu(step) {
     const container = document.getElementById('practice-grid');
+    // Reveal the orosu_digit cell in the diff row
     const cells = GridRenderer.getCellsForStep(container, step, problem);
-    cells.forEach(({ el }) => {
-      el.classList.add('incorrect');
-      el.textContent = inputBuffer || '?';
+    cells.forEach(({ el, cell }) => {
+      el.textContent = cell.value !== null ? cell.value : '';
+      el.classList.remove('input-target');
+      el.classList.add('orosu-reveal');
+      setTimeout(() => el.classList.remove('orosu-reveal'), 600);
     });
-    inputBuffer = '';
-    setTimeout(() => {
-      cells.forEach(({ el }) => {
-        el.classList.remove('incorrect');
-        el.textContent = '';
-      });
-      updateActiveCell('');
-    }, 600);
+    setSpeech(Division.stepExplanation(step, problem.divisor));
+    setMnemonic('orosu');
   }
 
-  // ── Internal: activate current step ──────────────────────
+  // ── Activate current step ─────────────────────────────────
   function activateCurrentStep() {
     if (!problem || stepIndex >= problem.steps.length) return;
     const step = problem.steps[stepIndex];
 
-    if (step.kind === 'orosu') {
-      animateOrosu(step);
-      stepIndex++;
-      setTimeout(() => {
-        if (stepIndex < problem.steps.length) activateCurrentStep();
-        else onComplete();
-      }, 600);
-      return;
-    }
-
     setMnemonic(step.kind);
-    updateInstruction();
+    setSpeech(Division.stepExplanation(step, problem.divisor));
 
     const container = document.getElementById('practice-grid');
-    // Remove previous active-input
     container.querySelectorAll('.active-input').forEach(el => el.classList.remove('active-input'));
 
     const cells = GridRenderer.getCellsForStep(container, step, problem);
-    // Activate only the first cell (for multi-digit, we show buffer in it)
-    if (cells.length > 0) {
-      cells[0].el.classList.add('active-input');
-    }
+    cells.forEach(({ el }) => el.classList.add('active-input'));
   }
 
-  function advanceStep() {
-    stepIndex++;
-    inputBuffer = '';
-    if (stepIndex >= problem.steps.length) { onComplete(); return; }
-    setTimeout(() => handleAutoSteps(), 200);
-  }
-
-  function animateOrosu(step) {
-    // Highlight the dividend digit being brought down
+  // ── Update cell display during multi-digit entry ──────────
+  function updateActiveCells() {
     const container = document.getElementById('practice-grid');
-    const { grid } = problem;
-    for (let r = 0; r < grid.length; r++) {
-      for (let c = 0; c < grid[0].length; c++) {
-        if (grid[r][c].kind === 'dividend' && c - 1 === step.digitPos) {
-          const el = container.querySelector(`[data-row="${r}"][data-col="${c}"]`);
-          if (el) {
-            el.classList.add('step-highlight');
-            setTimeout(() => el.classList.remove('step-highlight'), 500);
-          }
-        }
-      }
-    }
-    setSpeech(Division.stepExplanation(step, problem.divisor));
-  }
-
-  // ── Update active cell display ────────────────────────────
-  function updateActiveCell(text) {
-    const container = document.getElementById('practice-grid');
-    const activeEl = container.querySelector('.active-input');
-    if (activeEl) activeEl.textContent = text;
-  }
-
-  // ── Instruction text ──────────────────────────────────────
-  function updateInstruction() {
     if (!problem || stepIndex >= problem.steps.length) return;
     const step = problem.steps[stepIndex];
-    setSpeech(Division.stepExplanation(step, problem.divisor));
-    const badge = document.getElementById('practice-step-label');
-    if (badge) {
-      const labels = { tateru:'たてる', kakeru:'かける', hiku:'ひく', orosu:'おろす' };
-      badge.textContent = labels[step.kind] || '';
-    }
+    const cells = GridRenderer.getCellsForStep(container, step, problem);
+    const buf = inputBuffer;
+
+    // Left-align: first character goes to first cell
+    cells.forEach(({ el }, idx) => {
+      el.textContent = idx < buf.length ? buf[idx] : '';
+    });
   }
 
-  // ── Completion ───────────────────────────────────────────
+  // ── Completion ────────────────────────────────────────────
   function onComplete() {
     stopTimer();
-    const elapsed = Date.now() - startTime;
-
-    // Show final answer in grid
+    const elapsedMs = Date.now() - startTime;
     const container = document.getElementById('practice-grid');
     container.querySelectorAll('.active-input').forEach(el => el.classList.remove('active-input'));
 
     setTimeout(() => {
-      App.navigate('result', { problem, hintsUsed, elapsedMs: elapsed, testMode, level });
-    }, 600);
+      App.navigate('result', { problem, hintsUsed, elapsedMs, testMode, diffKey });
+    }, 500);
   }
 
   // ── Timer ─────────────────────────────────────────────────
@@ -284,15 +249,12 @@ const Practice = (() => {
     }, 1000);
   }
 
-  function stopTimer() {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
+  function stopTimer() { clearInterval(timerInterval); timerInterval = null; }
 
   // ── Helpers ───────────────────────────────────────────────
   function setMnemonic(kind) {
-    document.querySelectorAll('.mnemonic-pill').forEach(pill => {
-      pill.classList.toggle('active', pill.dataset.kind === kind);
+    document.querySelectorAll('#practice-screen .mnemonic-pill').forEach(p => {
+      p.classList.toggle('active', p.dataset.kind === kind);
     });
   }
 
@@ -305,6 +267,9 @@ const Practice = (() => {
     if (hintTimeout) { clearTimeout(hintTimeout); hintTimeout = null; }
   }
 
-  return { init, numpadInput, numpadBackspace, showHint };
+  return {
+    init, numpadInput, numpadBackspace, showHint,
+    get wasTestMode() { return _wasTestMode; },
+  };
 
 })();
