@@ -7,9 +7,10 @@
 
 const Division = (() => {
 
-  // Problem bank — 4 levels
+  // Problem bank keyed by "${digits}-${remainder?1:0}"
+  // 3-digit problems: first digit >= divisor (avoids 0 leading quotient)
   const PROBLEMS = {
-    1: [ // 2桁÷1桁 余りなし
+    '2-0': [ // 2桁÷1桁 余りなし
       { dividend: 48, divisor: 4 },
       { dividend: 69, divisor: 3 },
       { dividend: 84, divisor: 4 },
@@ -20,56 +21,59 @@ const Division = (() => {
       { dividend: 55, divisor: 5 },
       { dividend: 66, divisor: 6 },
       { dividend: 77, divisor: 7 },
+      { dividend: 84, divisor: 7 },
+      { dividend: 96, divisor: 8 },
     ],
-    2: [ // 2桁÷1桁 余りあり
+    '2-1': [ // 2桁÷1桁 余りあり
       { dividend: 47, divisor: 3 },
       { dividend: 75, divisor: 4 },
       { dividend: 53, divisor: 4 },
       { dividend: 67, divisor: 5 },
       { dividend: 79, divisor: 6 },
       { dividend: 83, divisor: 7 },
-      { dividend: 59, divisor: 4 },
-      { dividend: 71, divisor: 8 },
+      { dividend: 65, divisor: 3 },
+      { dividend: 76, divisor: 5 },
+      { dividend: 87, divisor: 6 },
+      { dividend: 91, divisor: 4 },
     ],
-    3: [ // 3桁÷1桁 余りなし
+    '3-0': [ // 3桁÷1桁 余りなし (first digit >= divisor)
       { dividend: 369, divisor: 3 },
-      { dividend: 486, divisor: 6 },
-      { dividend: 248, divisor: 4 },
-      { dividend: 357, divisor: 7 },
-      { dividend: 693, divisor: 9 },
-      { dividend: 624, divisor: 8 },
-      { dividend: 525, divisor: 5 },
-      { dividend: 468, divisor: 4 },
+      { dividend: 248, divisor: 2 },
+      { dividend: 963, divisor: 3 },
+      { dividend: 864, divisor: 4 },
+      { dividend: 555, divisor: 5 },
+      { dividend: 396, divisor: 3 },
+      { dividend: 639, divisor: 3 },
+      { dividend: 842, divisor: 2 },
+      { dividend: 682, divisor: 2 },
+      { dividend: 936, divisor: 3 },
     ],
-    4: [ // 3桁÷1桁 余りあり
-      { dividend: 487, divisor: 6 },
-      { dividend: 256, divisor: 7 },
-      { dividend: 379, divisor: 5 },
-      { dividend: 283, divisor: 9 },
-      { dividend: 517, divisor: 8 },
-      { dividend: 643, divisor: 7 },
-      { dividend: 391, divisor: 6 },
+    '3-1': [ // 3桁÷1桁 余りあり (first digit >= divisor)
+      { dividend: 247, divisor: 2 },
+      { dividend: 694, divisor: 3 },
+      { dividend: 683, divisor: 2 },
+      { dividend: 557, divisor: 5 },
+      { dividend: 865, divisor: 4 },
+      { dividend: 397, divisor: 3 },
+      { dividend: 641, divisor: 3 },
+      { dividend: 843, divisor: 2 },
+      { dividend: 937, divisor: 3 },
     ],
   };
 
   /**
-   * Compute all た・か・ひ・お steps for a division problem.
-   * Also builds the 2D grid layout used for rendering.
-   *
-   * @param {number} dividend
-   * @param {number} divisor
-   * @returns {object} problem result with steps[] and grid[][]
+   * Compute all た・か・ひ・お steps.
+   * Also builds the 2D grid layout for rendering.
    */
   function computeSteps(dividend, divisor) {
     const dividendDigits = String(dividend).split('').map(Number);
-    const n = dividendDigits.length; // number of dividend digits
+    const n = dividendDigits.length;
 
     const steps = [];
     const quotientDigits = [];
     let running = 0;
 
     for (let i = 0; i < n; i++) {
-      // おろす (bring down) — not on first iteration
       if (i > 0) {
         steps.push({
           kind: 'orosu',
@@ -81,7 +85,6 @@ const Division = (() => {
       }
       running = running * 10 + dividendDigits[i];
 
-      // たてる (estimate quotient digit)
       const q = Math.floor(running / divisor);
       quotientDigits.push(q);
       steps.push({
@@ -91,7 +94,6 @@ const Division = (() => {
         currentValue: running,
       });
 
-      // かける (multiply)
       const product = q * divisor;
       steps.push({
         kind: 'kakeru',
@@ -101,7 +103,6 @@ const Division = (() => {
         minuend: running,
       });
 
-      // ひく (subtract)
       const diff = running - product;
       steps.push({
         kind: 'hiku',
@@ -116,120 +117,108 @@ const Division = (() => {
 
     const quotient = Number(quotientDigits.join(''));
     const remainder = running;
-
-    // Build the 2D grid
-    const grid = buildGrid(dividend, divisor, dividendDigits, quotientDigits, steps, remainder);
+    const grid = buildGrid(dividendDigits, divisor, quotientDigits, steps, remainder);
 
     return { dividend, divisor, quotient, remainder, steps, grid, dividendDigits, quotientDigits };
   }
 
   /**
-   * Build 2D grid layout for the division tableau.
-   * Grid rows (for 2-digit dividend with 2 rounds):
-   *   row 0: quotient digits (given: false, filled by たてる steps)
-   *   row 1: [divisor] [bracket-top bar] [dividend digits]
-   *   row 2: [space]   [product 1]
-   *   row 3: subtraction line
-   *   row 4: [space]   [difference / remainder partial]
-   *   row 5: [space]   [product 2]  (if 3+ digit)
-   *   row 6: subtraction line
-   *   row 7: [space]   [final remainder]
+   * Build the 2D grid for the division tableau.
    *
-   * For N dividend digits there are N rounds × 3 rows (product, line, diff)
-   * plus 2 header rows = 2 + N*3 total rows.
-   * Columns: 1 (divisor) + N (dividend digits) = N+1.
+   * Layout per round i (0-indexed):
+   *   baseRow = 2 + i*3
+   *   baseRow+0: product digits (right-aligned to col i+1)
+   *   baseRow+1: subtraction line (always spans cols 1..i+1)
+   *   baseRow+2: diff digits + orosu digit (for rounds < last)
    *
-   * Each cell: { kind, value, given, row, col, stepKind, digitPos, span }
+   * Rows: 2 (header) + n*3 total
+   * Cols: n+1 (col0=divisor, cols1..n=digit positions)
+   *
+   * KEY: diff row also contains the brought-down digit (orosu)
+   * in the next column, matching standard Japanese textbook format.
    */
-  function buildGrid(dividend, divisor, dividendDigits, quotientDigits, steps, remainder) {
+  function buildGrid(dividendDigits, divisor, quotientDigits, steps, remainder) {
     const n = dividendDigits.length;
-    const cols = n + 1; // col 0 = divisor area, cols 1..n = digit columns
-    const rows = 2 + n * 3; // header (2) + N rounds of (product, line, diff)
+    const cols = n + 1;
+    const rows = 2 + n * 3;
 
-    // Initialize empty grid
-    const grid = [];
-    for (let r = 0; r < rows; r++) {
-      grid.push([]);
-      for (let c = 0; c < cols; c++) {
-        grid[r].push({ kind: 'empty', value: null, given: false, row: r, col: c });
-      }
-    }
+    // Initialize with empty cells
+    const grid = Array.from({ length: rows }, (_, r) =>
+      Array.from({ length: cols }, (_, c) => ({
+        kind: 'empty', value: null, given: false, row: r, col: c,
+      }))
+    );
 
-    // Row 0: quotient digits — columns 1..n, one per dividend digit
+    // Row 0: quotient placeholders (revealed by たてる steps)
     for (let i = 0; i < n; i++) {
       grid[0][i + 1] = {
-        kind: 'quotient',
-        value: quotientDigits[i],
-        given: false,
-        row: 0, col: i + 1,
-        stepKind: 'tateru',
-        digitPos: i,
+        kind: 'quotient', value: quotientDigits[i], given: false,
+        row: 0, col: i + 1, stepKind: 'tateru', digitPos: i,
       };
     }
 
-    // Row 1: divisor in col 0, dividend digits in cols 1..n
+    // Row 1: divisor (col 0) + dividend digits (cols 1..n)
     grid[1][0] = { kind: 'divisor', value: divisor, given: true, row: 1, col: 0 };
     for (let i = 0; i < n; i++) {
-      grid[1][i + 1] = { kind: 'dividend', value: dividendDigits[i], given: true, row: 1, col: i + 1 };
+      grid[1][i + 1] = {
+        kind: 'dividend', value: dividendDigits[i], given: true, row: 1, col: i + 1,
+      };
     }
 
-    // Rounds: for each dividend digit position, fill product row, line, diff row
+    // Per-round rows
     for (let i = 0; i < n; i++) {
       const baseRow = 2 + i * 3;
       const product = quotientDigits[i] * divisor;
       const productStr = String(product);
-
-      // Product row — right-aligned within columns 1..i+1
-      // product occupies up to (i+1) columns, right-aligned
       const productDigits = productStr.split('').map(Number);
-      const startCol = i + 2 - productDigits.length; // right-align to col i+1
-      for (let d = 0; d < productDigits.length; d++) {
-        const c = startCol + d;
+
+      // Product row: right-aligned to col i+1
+      const pStartCol = (i + 1) + 1 - productDigits.length; // = i+2-productDigits.length
+      productDigits.forEach((d, k) => {
+        const c = pStartCol + k;
         if (c >= 1 && c <= i + 1) {
           grid[baseRow][c] = {
-            kind: 'product',
-            value: productDigits[d],
-            given: false,
-            row: baseRow, col: c,
-            stepKind: 'kakeru',
-            digitPos: i,
-            isLastDigit: d === productDigits.length - 1,
+            kind: 'product', value: d, given: false,
+            row: baseRow, col: c, stepKind: 'kakeru', digitPos: i,
           };
         }
-      }
-      // Mark whole product span for the step
-      grid[baseRow][i + 1].productFull = product;
-      grid[baseRow][i + 1].productSpan = productDigits.length;
+      });
 
-      // Subtraction line row
+      // Subtraction line: stored at col i+1, span = i+1 (rendered from col1)
       grid[baseRow + 1][i + 1] = {
-        kind: 'line',
-        value: null,
-        given: true,
-        row: baseRow + 1, col: i + 1,
-        span: i + 1, // span from col 1 to col i+1
+        kind: 'line', value: null, given: true,
+        row: baseRow + 1, col: i + 1, span: i + 1,
       };
 
-      // Difference row
-      const diff = i < n - 1
-        ? Math.floor(steps.find(s => s.kind === 'hiku' && s.digitPos === i).value)
-        : remainder;
+      // Diff row: difference digits right-aligned to col i+1
+      const hikuStep = steps.find(s => s.kind === 'hiku' && s.digitPos === i);
+      const diff = hikuStep ? hikuStep.value : remainder;
       const diffStr = String(diff);
-      const diffDigits = diffStr === '0' ? [0] : diffStr.split('').map(Number);
-      // Right-align diff within columns 1..i+1
-      const diffStartCol = i + 2 - diffDigits.length;
-      for (let d = 0; d < diffDigits.length; d++) {
-        const c = diffStartCol + d;
+      const diffDigits = diffStr.split('').map(Number);
+      const dStartCol = (i + 1) + 1 - diffDigits.length;
+      diffDigits.forEach((d, k) => {
+        const c = dStartCol + k;
         if (c >= 1 && c <= n) {
           grid[baseRow + 2][c] = {
             kind: i < n - 1 ? 'diff' : 'remainder',
-            value: diffDigits[d],
-            given: false,
+            value: d, given: false,
             row: baseRow + 2, col: c,
-            stepKind: 'hiku',
-            digitPos: i,
+            stepKind: 'hiku', digitPos: i,
           };
         }
+      });
+
+      // Orosu digit: next dividend digit appears in the diff row (right of diff)
+      // This matches the standard Japanese textbook format
+      if (i < n - 1) {
+        grid[baseRow + 2][i + 2] = {
+          kind: 'orosu_digit',
+          value: dividendDigits[i + 1],
+          given: false,
+          row: baseRow + 2, col: i + 2,
+          stepKind: 'orosu',
+          digitPos: i + 1,
+        };
       }
     }
 
@@ -237,28 +226,32 @@ const Division = (() => {
   }
 
   /**
-   * Select a problem for a given level, avoiding recent problems.
+   * Select a problem by difficulty settings, avoiding recent problems.
+   * @param {number} digits - 2 or 3
+   * @param {boolean} hasRemainder
+   * @param {string[]} recentKeys - e.g. ["48÷4", "69÷3"]
    */
-  function selectProblem(level, recentKeys = []) {
-    const pool = PROBLEMS[level] || PROBLEMS[1];
+  function selectProblem(digits, hasRemainder, recentKeys = []) {
+    const key = `${digits}-${hasRemainder ? 1 : 0}`;
+    const pool = PROBLEMS[key] || PROBLEMS['2-0'];
     const available = pool.filter(p => !recentKeys.includes(`${p.dividend}÷${p.divisor}`));
     const source = available.length > 0 ? available : pool;
     return source[Math.floor(Math.random() * source.length)];
   }
 
   /**
-   * Generate human-readable explanation for each step kind.
+   * Human-readable step explanations in Japanese.
    */
   function stepExplanation(step, divisor) {
     switch (step.kind) {
       case 'tateru':
-        return `${step.currentValue} ÷ ${divisor} = ${step.value}　だから、${step.value} をたてるよ！`;
+        return `${step.currentValue} ÷ ${divisor} = ${step.value}　→　${step.value} を書こう！`;
       case 'kakeru':
-        return `${divisor} × ${step.quotientDigit} = ${step.value}　かけ算をしよう！`;
+        return `${divisor} × ${step.quotientDigit} = ${step.value}　→　かけ算をしよう！`;
       case 'hiku':
-        return `${step.minuend} − ${step.subtrahend} = ${step.value}　ひき算をしよう！`;
+        return `${step.minuend} − ${step.subtrahend} = ${step.value}　→　ひき算をしよう！`;
       case 'orosu':
-        return `次の数字 ${step.digit} をおろすよ！`;
+        return `${step.digit} をおろして　${step.runningAfter} にしよう！`;
       default:
         return '';
     }

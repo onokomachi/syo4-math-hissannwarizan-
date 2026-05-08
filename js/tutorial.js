@@ -6,34 +6,31 @@
 
 const Tutorial = (() => {
 
-  let problem = null;
-  let stepIndex = 0;
-  let autoplayTimer = null;
-  let isAutoplaying = false;
+  let problem      = null;
+  let stepIndex    = 0;
+  let autoTimer    = null;
+  let isAutoplay   = false;
 
-  const AUTOPLAY_INTERVAL = 2000; // ms per step
+  const AUTO_INTERVAL = 2000;
 
   // ── Public: init ──────────────────────────────────────────
   function init(params = {}) {
     stopAutoplay();
     stepIndex = 0;
 
-    const level = params.level !== undefined ? params.level : App.getCurrentLevel();
+    const d = App.getDifficulty();
     const recent = App.getRecentProblems();
-    const { dividend, divisor } = Division.selectProblem(level, recent);
+    const { dividend, divisor } = Division.selectProblem(d.digits, d.remainder, recent);
     problem = Division.computeSteps(dividend, divisor);
 
-    // Problem display in header
-    const disp = document.getElementById('tutorial-problem-display');
-    if (disp) disp.textContent = `${dividend} ÷ ${divisor}`;
+    const dispEl = document.getElementById('tutorial-problem-display');
+    if (dispEl) dispEl.textContent = `${dividend} ÷ ${divisor}`;
 
-    // Render grid (all hidden except given cells)
     const container = document.getElementById('tutorial-grid');
     GridRenderer.render(container, problem, { interactive: false, allVisible: false });
 
-    // Reset mnemonic, speech, answer, counter
     setMnemonic(null);
-    setSpeech('「つぎへ」ボタンを押して手順を見てみよう！');
+    setSpeech('「つぎへ」を押して手順を見てみよう！');
     document.getElementById('tutorial-answer').style.display = 'none';
     updateCounter();
     updateNavButtons();
@@ -42,131 +39,94 @@ const Tutorial = (() => {
   // ── Public: nextStep ─────────────────────────────────────
   function nextStep() {
     if (!problem) return;
-    const steps = problem.steps;
-    if (stepIndex >= steps.length) {
-      showAnswer();
+    if (stepIndex >= problem.steps.length) {
+      // Restart
+      init();
       return;
     }
-    revealStep(steps[stepIndex]);
+    revealStep(problem.steps[stepIndex], true);
     stepIndex++;
     updateCounter();
     updateNavButtons();
-    if (stepIndex >= steps.length) showAnswer();
+    if (stepIndex >= problem.steps.length) showAnswer();
   }
 
   // ── Public: prevStep ─────────────────────────────────────
   function prevStep() {
     if (!problem || stepIndex <= 0) return;
-    // Re-render from scratch and replay up to stepIndex-1
-    stepIndex = Math.max(0, stepIndex - 1);
+    stepIndex--;
+
     const container = document.getElementById('tutorial-grid');
     GridRenderer.render(container, problem, { interactive: false, allVisible: false });
     document.getElementById('tutorial-answer').style.display = 'none';
 
     for (let i = 0; i < stepIndex; i++) {
-      revealStep(problem.steps[i], /* animate */ false);
+      revealStep(problem.steps[i], false);
     }
-    const lastStep = stepIndex > 0 ? problem.steps[stepIndex - 1] : null;
-    setMnemonic(lastStep ? lastStep.kind : null);
-    setSpeech(lastStep ? Division.stepExplanation(lastStep, problem.divisor) : '「つぎへ」ボタンを押して手順を見てみよう！');
+
+    const last = stepIndex > 0 ? problem.steps[stepIndex - 1] : null;
+    setMnemonic(last ? last.kind : null);
+    setSpeech(last ? Division.stepExplanation(last, problem.divisor) : '「つぎへ」を押して手順を見てみよう！');
     updateCounter();
     updateNavButtons();
   }
 
   // ── Public: toggleAutoplay ───────────────────────────────
   function toggleAutoplay() {
-    if (isAutoplaying) {
-      stopAutoplay();
-    } else {
-      startAutoplay();
-    }
+    isAutoplay ? stopAutoplay() : startAutoplay();
   }
 
   function startAutoplay() {
-    isAutoplaying = true;
+    isAutoplay = true;
     const btn = document.getElementById('tutorial-autoplay-btn');
-    if (btn) btn.textContent = '⏸ ていし';
-    autoplayTimer = setInterval(() => {
-      if (stepIndex >= problem.steps.length) {
-        stopAutoplay();
-        showAnswer();
-        return;
-      }
+    if (btn) { btn.textContent = '⏸ ていし'; btn.classList.add('playing'); }
+    autoTimer = setInterval(() => {
+      if (stepIndex >= problem.steps.length) { stopAutoplay(); return; }
       nextStep();
-    }, AUTOPLAY_INTERVAL);
+    }, AUTO_INTERVAL);
   }
 
   function stopAutoplay() {
-    isAutoplaying = false;
-    clearInterval(autoplayTimer);
-    autoplayTimer = null;
+    isAutoplay = false;
+    clearInterval(autoTimer);
+    autoTimer = null;
     const btn = document.getElementById('tutorial-autoplay-btn');
-    if (btn) btn.textContent = '▶ じどう';
+    if (btn) { btn.textContent = '▶ じどう'; btn.classList.remove('playing'); }
   }
 
-  // ── Internal helpers ─────────────────────────────────────
+  // ── Internal ─────────────────────────────────────────────
 
-  function revealStep(step, animate = true) {
-    const container = document.getElementById('tutorial-grid');
+  function revealStep(step, animate) {
     setMnemonic(step.kind);
     setSpeech(Division.stepExplanation(step, problem.divisor));
 
-    if (step.kind === 'orosu') {
-      // Highlight the digit being brought down in the dividend row
-      animateOrosu(container, step, animate);
-      return;
-    }
-
-    // Find and reveal cells for this step
+    const container = document.getElementById('tutorial-grid');
     const cells = GridRenderer.getCellsForStep(container, step, problem);
+
     cells.forEach(({ el, cell }) => {
-      if (cell.value !== null) {
-        el.textContent = cell.value;
-      }
+      if (cell.value !== null) el.textContent = cell.value;
       if (animate) {
-        el.classList.remove('step-reveal', 'step-highlight');
-        void el.offsetWidth; // reflow
+        el.classList.remove('step-reveal');
+        void el.offsetWidth;
         el.classList.add('step-reveal');
         setTimeout(() => el.classList.remove('step-reveal'), 600);
       }
     });
   }
 
-  function animateOrosu(container, step, animate) {
-    // Highlight the source dividend digit
-    const { grid } = problem;
-    const rows = grid.length;
-    const cols = grid[0].length;
-
-    // Find the dividend cell at digitPos
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (grid[r][c].kind === 'dividend' && c - 1 === step.digitPos) {
-          const srcEl = container.querySelector(`[data-row="${r}"][data-col="${c}"]`);
-          if (srcEl && animate) {
-            srcEl.classList.add('step-highlight');
-            setTimeout(() => srcEl.classList.remove('step-highlight'), 800);
-          }
-        }
-      }
-    }
-  }
-
   function showAnswer() {
     const ansEl = document.getElementById('tutorial-answer');
     const valEl = document.getElementById('tutorial-answer-val');
-    if (!ansEl || !valEl) return;
-    const { quotient, remainder } = problem;
-    valEl.textContent = remainder > 0
-      ? `${quotient} あまり ${remainder}`
-      : `${quotient}`;
+    if (!ansEl || !valEl || !problem) return;
+    const r = problem.remainder > 0 ? ` あまり ${problem.remainder}` : '';
+    valEl.textContent = `${problem.quotient}${r}`;
     ansEl.style.display = '';
     updateNavButtons();
   }
 
   function setMnemonic(kind) {
-    document.querySelectorAll('.mnemonic-pill').forEach(pill => {
-      pill.classList.toggle('active', pill.dataset.kind === kind);
+    document.querySelectorAll('#tutorial-screen .mnemonic-pill').forEach(p => {
+      p.classList.toggle('active', p.dataset.kind === kind);
     });
   }
 
@@ -177,22 +137,15 @@ const Tutorial = (() => {
 
   function updateCounter() {
     const el = document.getElementById('tutorial-step-counter');
-    if (!el || !problem) return;
-    el.textContent = `ステップ ${stepIndex} / ${problem.steps.length}`;
+    if (el && problem) el.textContent = `ステップ ${stepIndex} / ${problem.steps.length}`;
   }
 
   function updateNavButtons() {
     const prevBtn = document.getElementById('tutorial-prev-btn');
     const nextBtn = document.getElementById('tutorial-next-btn');
     if (prevBtn) prevBtn.disabled = stepIndex <= 0;
-    if (nextBtn) nextBtn.textContent = stepIndex >= (problem ? problem.steps.length : 0)
-      ? 'もう一度'
-      : 'つぎへ ▶';
-    if (nextBtn && stepIndex >= (problem ? problem.steps.length : 0)) {
-      nextBtn.onclick = () => init({ level: App.getCurrentLevel() });
-    } else if (nextBtn) {
-      nextBtn.onclick = nextStep;
-    }
+    const done = stepIndex >= (problem ? problem.steps.length : 0);
+    if (nextBtn) nextBtn.textContent = done ? '▶ もう一度' : 'つぎへ ▶';
   }
 
   return { init, nextStep, prevStep, toggleAutoplay };

@@ -3,114 +3,140 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>筆算の割り算</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div id="app">
 
-  <!-- ========== ホーム画面 ========== -->
+  <!-- ===================== ホーム ===================== -->
   <section data-screen="home" class="active">
-    <header class="home-header">
-      <h1>筆算の<ruby>割<rt>わり</rt></ruby>り算</h1>
-      <div class="level-badge" id="home-level-badge">レベル <span id="home-level-num">1</span></div>
-    </header>
-    <main class="home-main">
-      <button class="mode-btn btn-tutorial" id="btn-tutorial" onclick="App.navigate('tutorial')">
-        <div class="mode-icon">📖</div>
-        <div class="mode-label"><ruby>例題<rt>れいだい</rt></ruby></div>
-        <div class="mode-sub">手順を見てみよう</div>
+    <div class="home-top">
+      <div class="home-title-area">
+        <div class="home-title">筆算の割り算</div>
+        <div class="home-subtitle">小学４年生</div>
+      </div>
+      <div id="difficulty-badge" class="diff-badge">2けた・あまりなし</div>
+    </div>
+
+    <div class="home-modes">
+      <button class="mode-card card-blue" onclick="App.navigate('tutorial')">
+        <span class="mc-icon">📖</span>
+        <span class="mc-title">れいだい</span>
+        <span class="mc-sub">手順を見てみよう</span>
       </button>
-      <button class="mode-btn btn-practice" id="btn-practice" onclick="App.navigate('practice', {testMode: false})">
-        <div class="mode-icon">✏️</div>
-        <div class="mode-label"><ruby>練習<rt>れんしゅう</rt></ruby></div>
-        <div class="mode-sub">ヒントあり</div>
+      <button class="mode-card card-green" onclick="App.navigate('practice',{testMode:false})">
+        <span class="mc-icon">✏️</span>
+        <span class="mc-title">れんしゅう</span>
+        <span class="mc-sub">ヒントあり</span>
       </button>
-      <button class="mode-btn btn-test" id="btn-test" onclick="App.navigate('practice', {testMode: true})">
-        <div class="mode-icon">⏱️</div>
-        <div class="mode-label">テスト</div>
-        <div class="mode-sub">ヒントなし</div>
+      <button class="mode-card card-purple" onclick="App.navigate('practice',{testMode:true})">
+        <span class="mc-icon">⏱️</span>
+        <span class="mc-title">テスト</span>
+        <span class="mc-sub">ヒントなし</span>
       </button>
-      <button class="mode-btn btn-progress" id="btn-progress" onclick="App.navigate('progress')">
-        <div class="mode-icon">📊</div>
-        <div class="mode-label"><ruby>記録<rt>きろく</rt></ruby></div>
-        <div class="mode-sub">これまでのせいせき</div>
+      <button class="mode-card card-orange" onclick="App.navigate('progress')">
+        <span class="mc-icon">📊</span>
+        <span class="mc-title">きろく</span>
+        <span class="mc-sub">これまでのせいせき</span>
       </button>
-    </main>
-    <div class="level-selector">
-      <span>レベル：</span>
-      <button class="lv-btn" onclick="App.setLevel(1)">1</button>
-      <button class="lv-btn" onclick="App.setLevel(2)">2</button>
-      <button class="lv-btn" onclick="App.setLevel(3)">3</button>
-      <button class="lv-btn" onclick="App.setLevel(4)">4</button>
+    </div>
+
+    <div class="home-settings">
+      <div class="setting-group">
+        <span class="setting-label">何けた？</span>
+        <div class="setting-btns">
+          <button class="digit-btn" data-digits="2" onclick="App.setDifficulty(2, App.getDifficulty().remainder)">２けた</button>
+          <button class="digit-btn" data-digits="3" onclick="App.setDifficulty(3, App.getDifficulty().remainder)">３けた</button>
+        </div>
+      </div>
+      <div class="setting-divider"></div>
+      <div class="setting-group">
+        <span class="setting-label">あまりは？</span>
+        <div class="setting-btns">
+          <button class="remainder-btn" data-remainder="false" onclick="App.setDifficulty(App.getDifficulty().digits, false)">なし</button>
+          <button class="remainder-btn" data-remainder="true"  onclick="App.setDifficulty(App.getDifficulty().digits, true)">あり</button>
+        </div>
+      </div>
     </div>
   </section>
 
-  <!-- ========== チュートリアル画面 ========== -->
-  <section data-screen="tutorial">
-    <header class="screen-header">
+  <!-- ================ チュートリアル ================= -->
+  <section data-screen="tutorial" id="tutorial-screen">
+    <header class="screen-hdr">
       <button class="back-btn" onclick="App.navigate('home')">◀ もどる</button>
-      <h2><ruby>例題<rt>れいだい</rt></ruby>：手順を学ぼう</h2>
-      <div class="problem-display" id="tutorial-problem-display"></div>
+      <div class="hdr-title">
+        <ruby>例題<rt>れいだい</rt></ruby>：手順を学ぼう
+      </div>
+      <div class="hdr-right" id="tutorial-problem-display"></div>
     </header>
-    <main class="tutorial-main">
-      <div class="grid-panel" id="tutorial-grid-panel">
+
+    <div class="split-layout">
+      <!-- Left: grid -->
+      <div class="grid-panel">
         <div class="division-grid" id="tutorial-grid"></div>
       </div>
-      <aside class="tutorial-aside">
-        <!-- た・か・ひ・お mnemonic bar -->
-        <div class="mnemonic-bar">
-          <div class="mnemonic-pill" data-kind="tateru">た<span>てる</span></div>
-          <div class="mnemonic-pill" data-kind="kakeru">か<span>ける</span></div>
-          <div class="mnemonic-pill" data-kind="hiku">ひ<span>く</span></div>
-          <div class="mnemonic-pill" data-kind="orosu">お<span>ろす</span></div>
+
+      <!-- Right: controls -->
+      <aside class="side-panel">
+        <div class="mnemonic-bar" id="tutorial-mnemonic">
+          <div class="mnemonic-pill" data-kind="tateru"><b>た</b>てる</div>
+          <div class="mnemonic-pill" data-kind="kakeru"><b>か</b>ける</div>
+          <div class="mnemonic-pill" data-kind="hiku"><b>ひ</b>く</div>
+          <div class="mnemonic-pill" data-kind="orosu"><b>お</b>ろす</div>
         </div>
-        <!-- Step counter -->
+
         <div class="step-counter" id="tutorial-step-counter">ステップ 0 / 0</div>
-        <!-- Speech bubble -->
+
         <div class="speech-bubble" id="tutorial-speech">
-          「つぎへ」ボタンを<ruby>押<rt>お</rt></ruby>して<br>手順を見てみよう！
+          「つぎへ」を押して手順を見てみよう！
         </div>
-        <!-- Controls -->
-        <div class="tutorial-controls">
-          <button class="ctrl-btn" id="tutorial-prev-btn" onclick="Tutorial.prevStep()" disabled>◀ もどる</button>
-          <button class="ctrl-btn primary" id="tutorial-next-btn" onclick="Tutorial.nextStep()">つぎへ ▶</button>
+
+        <div class="btn-row">
+          <button class="btn-secondary" id="tutorial-prev-btn" onclick="Tutorial.prevStep()" disabled>◀ もどる</button>
+          <button class="btn-primary" id="tutorial-next-btn" onclick="Tutorial.nextStep()">つぎへ ▶</button>
         </div>
-        <button class="ctrl-btn autoplay-btn" id="tutorial-autoplay-btn" onclick="Tutorial.toggleAutoplay()">▶ じどう</button>
-        <div class="tutorial-answer" id="tutorial-answer" style="display:none;">
-          <strong>答え：<span id="tutorial-answer-val"></span></strong>
+
+        <button class="btn-autoplay" id="tutorial-autoplay-btn" onclick="Tutorial.toggleAutoplay()">▶ じどう</button>
+
+        <div class="answer-box" id="tutorial-answer" style="display:none;">
+          答え：<strong id="tutorial-answer-val"></strong>
         </div>
       </aside>
-    </main>
+    </div>
   </section>
 
-  <!-- ========== 練習・テスト画面 ========== -->
-  <section data-screen="practice">
-    <header class="screen-header">
+  <!-- =============== 練習・テスト ================= -->
+  <section data-screen="practice" id="practice-screen">
+    <header class="screen-hdr">
       <button class="back-btn" onclick="App.navigate('home')">◀ もどる</button>
-      <h2 id="practice-title">れんしゅう</h2>
-      <div class="practice-meta">
-        <span id="practice-step-label" class="step-label-badge"></span>
+      <div class="hdr-title" id="practice-title">れんしゅう</div>
+      <div class="hdr-right practice-hdr-right">
+        <span id="practice-problem-label" class="problem-label"></span>
         <span id="practice-timer" class="timer-display" style="display:none;">00:00</span>
       </div>
     </header>
-    <main class="practice-main">
-      <div class="grid-panel" id="practice-grid-panel">
+
+    <div class="split-layout">
+      <!-- Left: grid -->
+      <div class="grid-panel">
         <div class="division-grid" id="practice-grid"></div>
       </div>
-      <aside class="practice-aside">
-        <!-- た・か・ひ・お mnemonic bar -->
+
+      <!-- Right: numpad + controls -->
+      <aside class="side-panel">
         <div class="mnemonic-bar">
-          <div class="mnemonic-pill" data-kind="tateru">た<span>てる</span></div>
-          <div class="mnemonic-pill" data-kind="kakeru">か<span>ける</span></div>
-          <div class="mnemonic-pill" data-kind="hiku">ひ<span>く</span></div>
-          <div class="mnemonic-pill" data-kind="orosu">お<span>ろす</span></div>
+          <div class="mnemonic-pill" data-kind="tateru"><b>た</b>てる</div>
+          <div class="mnemonic-pill" data-kind="kakeru"><b>か</b>ける</div>
+          <div class="mnemonic-pill" data-kind="hiku"><b>ひ</b>く</div>
+          <div class="mnemonic-pill" data-kind="orosu"><b>お</b>ろす</div>
         </div>
-        <!-- Step instruction -->
-        <div class="practice-instruction" id="practice-instruction"></div>
-        <!-- Numpad -->
+
+        <div class="instruction-box" id="practice-instruction">
+          問題を読んで、数を入れてみよう！
+        </div>
+
         <div class="numpad" id="numpad">
           <button class="np-btn" onclick="Practice.numpadInput(7)">7</button>
           <button class="np-btn" onclick="Practice.numpadInput(8)">8</button>
@@ -124,46 +150,50 @@
           <button class="np-btn np-zero" onclick="Practice.numpadInput(0)">0</button>
           <button class="np-btn np-back" onclick="Practice.numpadBackspace()">⌫</button>
         </div>
-        <!-- Hint button (practice mode only) -->
-        <button class="hint-btn" id="hint-btn" onclick="Practice.showHint()">
+
+        <button class="btn-hint" id="hint-btn" onclick="Practice.showHint()">
           💡 ヒント
         </button>
       </aside>
-    </main>
+    </div>
   </section>
 
-  <!-- ========== 結果画面 ========== -->
+  <!-- =================== 結果 ===================== -->
   <section data-screen="result">
-    <main class="result-main">
+    <div class="result-wrapper">
       <div class="result-card">
         <div class="result-icon" id="result-icon">🎉</div>
-        <h2 id="result-title">せいかい！</h2>
-        <div class="result-problem" id="result-problem"></div>
+        <div class="result-title" id="result-title">せいかい！</div>
+        <div class="result-equation" id="result-problem"></div>
         <div class="result-stats">
-          <div class="stat"><span class="stat-label">じかん</span><span class="stat-val" id="result-time">--</span></div>
-          <div class="stat"><span class="stat-label">ヒント</span><span class="stat-val" id="result-hints">0回</span></div>
+          <div class="stat-box">
+            <div class="stat-lbl">じかん</div>
+            <div class="stat-val" id="result-time">--</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-lbl">ヒント</div>
+            <div class="stat-val" id="result-hints">0回</div>
+          </div>
         </div>
-        <div class="result-promote" id="result-promote" style="display:none;">
-          <p>🌟 レベルアップ！</p>
-        </div>
-        <div class="result-actions">
-          <button class="ctrl-btn primary" onclick="App.navigate('practice', {testMode: Practice.wasTestMode})">もう一問</button>
-          <button class="ctrl-btn" onclick="App.navigate('home')">ホームへ</button>
+        <div class="result-bonus" id="result-bonus" style="display:none;"></div>
+        <div class="btn-row result-btns">
+          <button class="btn-primary" onclick="App.navigate('practice',{testMode:Practice.wasTestMode})">もう一問</button>
+          <button class="btn-secondary" onclick="App.navigate('home')">ホームへ</button>
         </div>
       </div>
-    </main>
+    </div>
   </section>
 
-  <!-- ========== 記録画面 ========== -->
+  <!-- =================== きろく =================== -->
   <section data-screen="progress">
-    <header class="screen-header">
+    <header class="screen-hdr">
       <button class="back-btn" onclick="App.navigate('home')">◀ もどる</button>
-      <h2>これまでの<ruby>記録<rt>きろく</rt></ruby></h2>
+      <div class="hdr-title">きろく</div>
     </header>
-    <main class="progress-main">
-      <div id="progress-content"></div>
-      <button class="ctrl-btn danger" onclick="App.clearProgress()">きろくをリセット</button>
-    </main>
+    <div class="progress-wrapper">
+      <div class="progress-grid" id="progress-content"></div>
+      <button class="btn-danger" onclick="App.clearProgress()">きろくをリセット</button>
+    </div>
   </section>
 
 </div><!-- #app -->

@@ -6,63 +6,60 @@
 
 const App = (() => {
 
-  // ── Progress (localStorage) ──────────────────────────────
-  const STORAGE_KEY = 'hissanwarizan_v1';
+  const STORAGE_KEY = 'hissanwarizan_v2';
 
+  // ── Progress (localStorage) ──────────────────────────────
   function getProgress() {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultProgress();
-    } catch (_) {
-      return defaultProgress();
-    }
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultProgress(); }
+    catch (_) { return defaultProgress(); }
   }
 
   function defaultProgress() {
+    const stats = () => ({ attempted: 0, perfect: 0, bestTime: null, streak: 0 });
     return {
-      level: 1,
+      difficulty: { digits: 2, remainder: false },
       history: [],
-      levelProgress: { 1: { attempted:0, perfect:0, bestTime:null, streak:0 },
-                       2: { attempted:0, perfect:0, bestTime:null, streak:0 },
-                       3: { attempted:0, perfect:0, bestTime:null, streak:0 },
-                       4: { attempted:0, perfect:0, bestTime:null, streak:0 } },
+      difficultyProgress: { '2-0': stats(), '2-1': stats(), '3-0': stats(), '3-1': stats() },
       recentProblems: [],
     };
   }
 
   function saveProgress(data) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(_) {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (_) {}
   }
 
-  function getCurrentLevel() { return getProgress().level; }
+  function getDifficulty() { return getProgress().difficulty; }
 
-  function setLevel(n) {
-    n = Math.max(1, Math.min(4, Number(n)));
+  function getDifficultyKey() {
+    const d = getDifficulty();
+    return `${d.digits}-${d.remainder ? 1 : 0}`;
+  }
+
+  function setDifficulty(digits, remainder) {
     const p = getProgress();
-    p.level = n;
+    p.difficulty = { digits, remainder: !!remainder };
     saveProgress(p);
-    renderHomeLevel();
-    highlightLevelBtn(n);
+    renderHomeUI();
   }
 
-  function recordResult({ level, dividend, divisor, hintsUsed, elapsedMs, mode }) {
+  function recordResult({ diffKey, dividend, divisor, hintsUsed, elapsedMs, mode }) {
     const p = getProgress();
     const key = `${dividend}÷${divisor}`;
     const perfect = hintsUsed === 0;
 
-    p.history.unshift({ date: new Date().toISOString(), level, dividend, divisor,
+    p.history.unshift({ date: new Date().toISOString(), diffKey, dividend, divisor,
                         hintsUsed, elapsedMs, mode, perfect });
-    if (p.history.length > 100) p.history = p.history.slice(0, 100);
+    if (p.history.length > 200) p.history = p.history.slice(0, 200);
 
-    const lp = p.levelProgress[level];
+    if (!p.difficultyProgress[diffKey]) {
+      p.difficultyProgress[diffKey] = { attempted:0, perfect:0, bestTime:null, streak:0 };
+    }
+    const lp = p.difficultyProgress[diffKey];
     lp.attempted++;
     if (perfect) { lp.perfect++; lp.streak++; } else { lp.streak = 0; }
-    if (perfect && (lp.bestTime === null || elapsedMs < lp.bestTime)) {
-      lp.bestTime = elapsedMs;
-    }
+    if (perfect && (lp.bestTime === null || elapsedMs < lp.bestTime)) lp.bestTime = elapsedMs;
 
-    // Track recent to avoid repetition
-    p.recentProblems = [key, ...p.recentProblems.filter(k => k !== key)].slice(0, 5);
-
+    p.recentProblems = [key, ...p.recentProblems.filter(k => k !== key)].slice(0, 6);
     saveProgress(p);
     return lp.streak;
   }
@@ -70,14 +67,13 @@ const App = (() => {
   function clearProgress() {
     if (!confirm('きろくをすべて消しますか？')) return;
     saveProgress(defaultProgress());
-    renderHomeLevel();
-    highlightLevelBtn(getCurrentLevel());
+    renderHomeUI();
     navigate('home');
   }
 
   function getRecentProblems() { return getProgress().recentProblems; }
 
-  // ── Screen navigation ────────────────────────────────────
+  // ── Navigation ────────────────────────────────────────────
   function navigate(screenName, params = {}) {
     document.querySelectorAll('section[data-screen]')
       .forEach(s => s.classList.remove('active'));
@@ -85,61 +81,62 @@ const App = (() => {
     if (!target) return;
     target.classList.add('active');
 
-    if (screenName === 'tutorial') Tutorial.init(params);
-    if (screenName === 'practice') Practice.init(params);
-    if (screenName === 'result')   renderResult(params);
-    if (screenName === 'progress') renderProgressScreen();
-    if (screenName === 'home')     renderHomeLevel();
+    if (screenName === 'tutorial')  Tutorial.init(params);
+    if (screenName === 'practice')  Practice.init(params);
+    if (screenName === 'result')    renderResult(params);
+    if (screenName === 'progress')  renderProgressScreen();
+    if (screenName === 'home')      renderHomeUI();
   }
 
-  // ── Home helpers ─────────────────────────────────────────
-  function renderHomeLevel() {
-    const lv = getCurrentLevel();
-    const el = document.getElementById('home-level-num');
-    if (el) el.textContent = lv;
-    highlightLevelBtn(lv);
-  }
-
-  function highlightLevelBtn(n) {
-    document.querySelectorAll('.lv-btn').forEach((btn, i) => {
-      btn.classList.toggle('active', i + 1 === n);
+  // ── Home UI ───────────────────────────────────────────────
+  function renderHomeUI() {
+    const d = getDifficulty();
+    // Highlight digit buttons
+    document.querySelectorAll('.digit-btn').forEach(btn => {
+      btn.classList.toggle('active', Number(btn.dataset.digits) === d.digits);
     });
+    // Highlight remainder buttons
+    document.querySelectorAll('.remainder-btn').forEach(btn => {
+      const isRemainder = btn.dataset.remainder === 'true';
+      btn.classList.toggle('active', isRemainder === d.remainder);
+    });
+    // Update badge
+    const badge = document.getElementById('difficulty-badge');
+    if (badge) {
+      badge.textContent = `${d.digits}けた　・　あまり${d.remainder ? 'あり' : 'なし'}`;
+    }
   }
 
   // ── Result screen ─────────────────────────────────────────
-  function renderResult({ problem, hintsUsed, elapsedMs, testMode, level }) {
+  function renderResult({ problem, hintsUsed, elapsedMs, testMode, diffKey }) {
     const perfect = hintsUsed === 0;
     document.getElementById('result-icon').textContent  = perfect ? '🎉' : '✅';
-    document.getElementById('result-title').textContent = perfect ? 'せいかい！パーフェクト！' : 'せいかい！';
+    document.getElementById('result-title').textContent = perfect ? 'パーフェクト！' : 'せいかい！';
+    const remainder = problem.remainder > 0 ? ` あまり ${problem.remainder}` : '';
     document.getElementById('result-problem').textContent =
-      `${problem.dividend} ÷ ${problem.divisor} = ${problem.quotient}` +
-      (problem.remainder > 0 ? ` あまり ${problem.remainder}` : '');
+      `${problem.dividend} ÷ ${problem.divisor} = ${problem.quotient}${remainder}`;
     document.getElementById('result-time').textContent = formatTime(elapsedMs);
     document.getElementById('result-hints').textContent = `${hintsUsed}回`;
 
     const streak = recordResult({
-      level, dividend: problem.dividend, divisor: problem.divisor,
+      diffKey, dividend: problem.dividend, divisor: problem.divisor,
       hintsUsed, elapsedMs, mode: testMode ? 'test' : 'practice',
     });
 
-    // Level promotion after 3 perfect-streak
-    const promoteEl = document.getElementById('result-promote');
-    const lv = getCurrentLevel();
-    if (streak >= 3 && lv < 4 && perfect) {
-      promoteEl.style.display = '';
-      promoteEl.innerHTML = `🌟 すごい！ レベル ${lv + 1} にチャレンジしよう！`;
-      setLevel(lv + 1);
+    // Streak bonus
+    const bonusEl = document.getElementById('result-bonus');
+    if (streak >= 3 && perfect) {
+      bonusEl.style.display = '';
+      bonusEl.textContent = `🌟 ${streak}問れんぞくせいかい！すごい！`;
     } else {
-      promoteEl.style.display = 'none';
+      bonusEl.style.display = 'none';
     }
   }
 
   function formatTime(ms) {
-    if (!ms) return '--';
+    if (!ms && ms !== 0) return '--';
     const s = Math.round(ms / 1000);
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   }
 
   // ── Progress screen ───────────────────────────────────────
@@ -147,41 +144,48 @@ const App = (() => {
     const p = getProgress();
     const container = document.getElementById('progress-content');
     container.innerHTML = '';
-    [1,2,3,4].forEach(lv => {
-      const lp = p.levelProgress[lv] || { attempted:0, perfect:0, bestTime:null };
+
+    const configs = [
+      { key: '2-0', label: '2けた あまりなし' },
+      { key: '2-1', label: '2けた あまりあり' },
+      { key: '3-0', label: '3けた あまりなし' },
+      { key: '3-1', label: '3けた あまりあり' },
+    ];
+    configs.forEach(({ key, label }) => {
+      const lp = p.difficultyProgress[key] || { attempted:0, perfect:0, bestTime:null };
       const card = document.createElement('div');
-      card.className = 'progress-level-card';
+      card.className = 'progress-card';
+      const stars = '⭐'.repeat(Math.min(lp.perfect, 5));
       card.innerHTML = `
-        <h3>レベル ${lv}</h3>
-        <div class="progress-stat">といた数<strong>${lp.attempted}</strong></div>
-        <div class="progress-stat">パーフェクト<strong>${lp.perfect}</strong></div>
-        <div class="progress-stat">ベストタイム<strong>${lp.bestTime ? formatTime(lp.bestTime) : '--'}</strong></div>
+        <div class="pcl">${label}</div>
+        <div class="pcv">${lp.attempted}<span>問</span></div>
+        <div class="pcs">パーフェクト ${lp.perfect}問</div>
+        <div class="pcs">ベスト ${formatTime(lp.bestTime)}</div>
+        <div class="pcstars">${stars || '－'}</div>
       `;
       container.appendChild(card);
     });
   }
 
   // ── Init ─────────────────────────────────────────────────
-  function init() {
-    renderHomeLevel();
-  }
+  function init() { renderHomeUI(); }
 
-  return { navigate, getCurrentLevel, setLevel, getRecentProblems,
-           recordResult, clearProgress, formatTime, init };
+  return { navigate, getDifficulty, getDifficultyKey, setDifficulty,
+           getRecentProblems, recordResult, clearProgress, formatTime, init };
 
 })();
 
 // ============================================================
-// GridRenderer — draws the division tableau into a container
+// GridRenderer — renders division tableau into a container
 // ============================================================
 
 const GridRenderer = (() => {
 
   /**
-   * Render the problem grid into the given container element.
+   * Render the problem grid.
    * @param {HTMLElement} container
-   * @param {object} problem — from Division.computeSteps()
-   * @param {object} opts — { interactive: bool, allVisible: bool }
+   * @param {object} problem - from Division.computeSteps()
+   * @param {object} opts - { interactive, allVisible }
    */
   function render(container, problem, opts = {}) {
     const { interactive = false, allVisible = false } = opts;
@@ -190,110 +194,75 @@ const GridRenderer = (() => {
     const cols = grid[0].length;
 
     container.innerHTML = '';
-    container.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
-    container.style.gridTemplateRows = '';
 
-    // Build explicit row template: normal rows are cell-size, line rows are 12px
-    const rowSizes = grid.map((row) => {
-      const hasLine = row.some(c => c.kind === 'line');
-      return hasLine ? '12px' : 'var(--cell-size)';
-    });
+    // Build row template: line rows are thin, others use --cell-size
+    const rowSizes = grid.map(row =>
+      row.some(c => c.kind === 'line') ? '10px' : 'var(--cell-size)'
+    );
+    container.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size))`;
     container.style.gridTemplateRows = rowSizes.join(' ');
 
     grid.forEach((row, r) => {
       row.forEach((cellDef, c) => {
-        const el = document.createElement('div');
-        el.className = `cell ${cellDef.kind}`;
-        el.dataset.row = r;
-        el.dataset.col = c;
-        if (cellDef.digitPos !== undefined) el.dataset.digitPos = cellDef.digitPos;
-        if (cellDef.stepKind)  el.dataset.stepKind = cellDef.stepKind;
 
+        // Line cells: span from col1 to col i+1 (CSS col 2 to span)
         if (cellDef.kind === 'line') {
-          // Line spans all filled columns of this round
-          const span = cellDef.span || 1;
-          const startCol = c + 1;
-          el.style.gridColumn = `${startCol} / span ${span}`;
+          const el = document.createElement('div');
+          el.className = 'cell line';
+          el.dataset.row = r;
+          el.dataset.col = c;
+          // Always start at CSS column 2 (grid array col 1), span = cellDef.span
+          el.style.gridColumn = `2 / span ${cellDef.span}`;
           el.style.gridRow = r + 1;
           container.appendChild(el);
           return;
         }
 
-        el.style.gridColumn = c + 1;
-        el.style.gridRow = r + 1;
+        const el = document.createElement('div');
+        el.className = `cell ${cellDef.kind}`;
+        el.dataset.row = r;
+        el.dataset.col = c;
+        if (cellDef.digitPos !== undefined) el.dataset.digitPos = cellDef.digitPos;
+        if (cellDef.stepKind)              el.dataset.stepKind  = cellDef.stepKind;
 
-        if (cellDef.given || allVisible) {
-          if (cellDef.value !== null) el.textContent = cellDef.value;
-        } else if (!cellDef.given && cellDef.kind !== 'empty') {
-          if (interactive) {
-            el.classList.add('input-target');
-          }
-        }
+        el.style.gridColumn = c + 1;
+        el.style.gridRow    = r + 1;
 
         if (cellDef.kind === 'empty') {
           el.style.visibility = 'hidden';
+          container.appendChild(el);
+          return;
+        }
+
+        if (cellDef.given || allVisible) {
+          if (cellDef.value !== null) el.textContent = cellDef.value;
+        } else if (interactive && !cellDef.given) {
+          el.classList.add('input-target');
         }
 
         container.appendChild(el);
       });
     });
-
-    // Draw the top bracket bar (horizontal line above dividend)
-    drawBracketBar(container, problem);
   }
 
   /**
-   * Draw the horizontal bar above dividend digits using an absolutely positioned div.
-   * The divisor cell already has border-right to form the vertical part.
-   */
-  function drawBracketBar(container, problem) {
-    // The bar sits above row 1 (dividend row), from col 1 to last col
-    // We'll use a pseudo-element via the divisor cell's border-bottom (already done in CSS)
-    // Just ensure the divisor cell border-bottom aligns with top of dividend
-    // This is handled in CSS already via .cell.divisor border-bottom
-  }
-
-  /**
-   * Get the DOM cell element for a given step.
-   */
-  function getCellForStep(container, step, problem) {
-    const { grid } = problem;
-    const rows = grid.length;
-    const cols = grid[0].length;
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cell = grid[r][c];
-        if (cell.stepKind === step.kind && cell.digitPos === step.digitPos) {
-          return container.querySelector(`[data-row="${r}"][data-col="${c}"]`);
-        }
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Get ALL DOM cells for a given step (product may span multiple cells).
+   * Get all DOM cells for a step (may be multiple for multi-digit products).
    */
   function getCellsForStep(container, step, problem) {
     const { grid } = problem;
-    const rows = grid.length;
-    const cols = grid[0].length;
     const cells = [];
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const cell = grid[r][c];
+    grid.forEach((row, r) => {
+      row.forEach((cell, c) => {
         if (cell.stepKind === step.kind && cell.digitPos === step.digitPos) {
           const el = container.querySelector(`[data-row="${r}"][data-col="${c}"]`);
           if (el) cells.push({ el, cell });
         }
-      }
-    }
+      });
+    });
     return cells;
   }
 
-  return { render, getCellForStep, getCellsForStep };
+  return { render, getCellsForStep };
 
 })();
 
